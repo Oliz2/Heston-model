@@ -269,22 +269,16 @@ public class Exercise1 {
 			
 			
 			final double rmse = result.getRootMeanSquaredError();
-			
-	
-			
-			if(Double.isFinite(rmse)) {
+		
 			final HestonModelDescriptor hestonDescriptor = (HestonModelDescriptor) result.getModel().getModelDescriptor();
 		
-			
 			currentParameters[0] = hestonDescriptor.getVolatility();
 			currentParameters[1]= hestonDescriptor.getTheta();
 			currentParameters[2] = hestonDescriptor.getKappa();
 			currentParameters[3]= hestonDescriptor.getXi();
 			currentParameters[4]= hestonDescriptor.getRho();
 			
-			
 		
-			
 			System.out.println(hestonDescriptor.getVolatility());
 			System.out.println(hestonDescriptor.getTheta());
 			System.out.println(hestonDescriptor.getKappa());
@@ -303,8 +297,6 @@ public class Exercise1 {
 			final double rhoSeries = hestonDescriptor.getRho();
 			
 			
-			
-	
 		
 			volatilityTimeSeries.add(today, volatilitySeries);
 			thetaTimeSeries.add(today, thetaSeries);
@@ -326,37 +318,6 @@ public class Exercise1 {
 			
 			
 			Assert.assertTrue(result.getRootMeanSquaredError() < 1.0);
-			
-			
-			//CalibrationUtilities.printErrorsTable(errorsOverview);
-			//Assert.assertTrue(result.getRootMeanSquaredError() < 1.0);
-			
-			
-			}else {
-				
-				
-				/*
-				System.err.println("Giorno Saltato: " + today + ". I dati non avevano senso, RMSE == infinito");
-				//Assert.assertTrue(result.getRootMeanSquaredError() < 1.0);
-				///*/
-				
-				conteggio++; 
-
-				
-				/*
-				ArrayList<String> errorsOverview = result.getCalibrationOutput();
-
-				
-				for(final String myString : errorsOverview) {
-					System.out.println(myStringv);
-				}
-				*/
-				
-				
-				
-			
-			}
-		}
 		
 		volatilityTimeSeries.plot("VolatilityIndex");
 		thetaTimeSeries.plot("ThetaIndex");
@@ -365,11 +326,12 @@ public class Exercise1 {
 		rhoTimeSeries.plot("rhoIndex");
 		rmseTimeSeries.plot("rmseTimeSeries");
 		
-		System.out.println(conteggio);
+	
 			
 			
 		}
 	}
+}
 
 		
 		
