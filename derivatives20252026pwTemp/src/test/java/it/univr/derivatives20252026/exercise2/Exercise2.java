@@ -40,13 +40,8 @@ public class Exercise2 {
 		 * Application of the Carr Madan formula for the
 		 * static replication of a Variance swap.
 		 */
-		
-		
-		
-		
+
 		//Step 1 Create a Heston model
-		
-		
 		
 		double volatility = 0.15;
 		double theta = 0.04;
@@ -62,87 +57,12 @@ public class Exercise2 {
 		TreeMap<LocalDate, OptionSurfaceData> marketData = MarketDataProvider.getVolatilityDataContainer();
 		OptionSurfaceData data = marketData.get(localDate);
 		
-		DiscountCurve discountCurve = data.getDiscountCurve();
 		
-		
-		final DiscountCurve curveSpot = data.getEquityForwardCurve();
-		final double[] maturities = data.getMaturities();
-		final double scalarFactor = 100;
-		final double initialValue = curveSpot.getValue(0.0)/scalarFactor;//valori scalati
-		final double originalValue = curveSpot.getValue(0.0);
-		/*in questo caso curveSpot deriva da data e data deriva da marketData cambia ogni giorno perchè è all'interno del ciclo
-		 * for, qudini io otterò un prezzo inziale S0 doverso per ogni giorno di trading*/
-		 
-		final double[] fowardMaturities = new double[maturities.length+1];
-		fowardMaturities[0] = 0.0;
-		System.arraycopy(maturities, 0, fowardMaturities, 1, maturities.length);
-		final double[] fowardFactor = new double[maturities.length+1];
-		
+		final DiscountCurve discountCurve = data.getDiscountCurve();
+		final DiscountCurve equityFowardCurve = data.getEquityForwardCurve();
 
-		
-		for(int i = 0; i < maturities.length+1; i++) {
-			
-			final double t = fowardMaturities[i];
-			
-			if(t == 0) {
-				fowardFactor[i] = initialValue; 
-				
-			}else {
-			
-				final double fowardValue = originalValue/discountCurve.getValue(t);
-				final double scalarFowardValue = fowardValue/scalarFactor; //valori scalati
-				fowardFactor[i] = scalarFowardValue;
-			}
-			
-			
-		}
-		
-		
-		final ExtrapolationMethod exMethod = ExtrapolationMethod.CONSTANT;
-		final InterpolationMethod intMethod = InterpolationMethod.LINEAR;
-		final InterpolationEntity intEntity = InterpolationEntity.LOG_OF_VALUE;
-		
-		
-		final DiscountCurve equityFowardCurve = DiscountCurveInterpolation.createDiscountCurveFromDiscountFactors(
-				"daxForwardCurve", 
-				fowardMaturities, 
-				fowardFactor,
-				intMethod, 
-				exMethod,
-				intEntity);
-		
-		final OptionSmileData[] allSmile = new OptionSmileData[maturities.length];
-		
-		
-		
-		for(int i = 0; i < maturities.length; i++) {
-			
-			OptionSmileData smiles = data.getSmile(maturities[i]);
-			final double[] strikeOriginal = smiles.getStrikes();	
-			
-			final double[] strikeScalar = new double[strikeOriginal.length];
-			final double[] valuesOriginal = new double[strikeOriginal.length];
-			
-			for(int j = 0; j < strikeOriginal.length; j++) {
-				strikeScalar[j] = strikeOriginal[j]/scalarFactor;
-				valuesOriginal[j] = data.getValue(maturities[i], strikeOriginal[j],QuotingConvention.VOLATILITYLOGNORMAL)/scalarFactor;//valore della volatilità scalato
-				
-		
-			}
-			
-			
-			allSmile[i] = new OptionSmileData(
-					"Dax", 
-					localDate, 
-					strikeScalar, 
-					smiles.getMaturity(), 
-					valuesOriginal,
-					QuotingConvention.VOLATILITYLOGNORMAL);
-			
-		}
-		
-		OptionSurfaceData surface = new OptionSurfaceData(allSmile, discountCurve, equityFowardCurve);
-	
+		final double initialValue = equityFowardCurve.getValue(0.0);
+
 		HestonModelDescriptor hestonModelDescription = new HestonModelDescriptor(
 				localDate, 
 				initialValue, 
@@ -153,7 +73,6 @@ public class Exercise2 {
 				kappa, 
 				xi, 
 				rho);
-		
 		final ScalarParameterInformationImplementation volatilityInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,1.0));
 		final ScalarParameterInformationImplementation thetaInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,1.0));
 		final ScalarParameterInformationImplementation kappaInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,20.0));
@@ -168,20 +87,14 @@ public class Exercise2 {
 				xiInformation,
 				rhoInformation,
 				false);
-
-		final OptimizerFactory optimizerFactory = new OptimizerFactoryLevenbergMarquardt(300 /* maxIterations */, 2 /* maxThreads */);
-		
-		final double maturityExercise1 = 105.0/252;
-		final EuropeanOptionSmileByCarrMadan pricer = new EuropeanOptionSmileByCarrMadan(maturityExercise1, new double [] {initialValue});
-		
-		
-		
-		final CalibratedModel problem = new CalibratedModel(surface, model, optimizerFactory, pricer , currentParameters, parameterStep);
 	
-		/*
-		 * Get the calibrated parameters
-		 */
+	
+		final OptimizerFactory optimizerFactory = new OptimizerFactoryLevenbergMarquardt(300 /* maxIterations */, 2 /* maxThreads */);
+		final double maturity = 30.0/252;
+		final EuropeanOptionSmileByCarrMadan pricer = new EuropeanOptionSmileByCarrMadan(maturity, new double [] {initialValue});
+		final CalibratedModel problem = new CalibratedModel(data, model, optimizerFactory, pricer , currentParameters,parameterStep);
 		
+
 		final OptimizationResult result = problem.getCalibration();
 		final HestonModelDescriptor calibratedHestonDescriptor = (HestonModelDescriptor) result.getModel().getModelDescriptor();
 		
@@ -190,12 +103,9 @@ public class Exercise2 {
 		kappa = calibratedHestonDescriptor.getKappa();
 		xi = calibratedHestonDescriptor.getXi();
 		rho = calibratedHestonDescriptor.getRho();
-		
-		
 		/*
 		 * Use the closed-form formula for the price of the variance swap
 		 */
-		final double maturity = 30.0/252;
 		final double term1 = 1 - Math.exp(-(kappa*maturity));
 		
 		final double fairVarSwapRate = ((term1/(kappa*maturity))*(volatility-theta))+theta;
