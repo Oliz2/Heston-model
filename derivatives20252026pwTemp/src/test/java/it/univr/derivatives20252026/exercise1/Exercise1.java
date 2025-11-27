@@ -142,10 +142,10 @@ public class Exercise1 {
 			}
 			
 			OptionSurfaceData data = marketData.get(today);
+			
 			/*tramite la curva surface io mi sto andando a prendere tutti i dati di cui io ho bosgno
 			 * riga per riga.
 			 */
-			final DiscountCurve discountCurve = data.getDiscountCurve();
 			/*riesce a crearmi una curva dei prezzi scontata per per tutti i miei dati all'intern del file,
 			 * in modo orizzontale qeuesta funzione mi prende tutti i miei dati e mi crea la curva di sconto per 
 			 * ogni scadenza T.
@@ -161,88 +161,24 @@ public class Exercise1 {
 			 *    Il processo si ripete, ottenendo una nuova DC per ogni giorno di analisi.
 			 */
 			
-			
-		
-			
-			
 			/*per creare la curva dei foward non c'è un modo univoco come per la curva di sconto.
 			 * in qeusto caso dovrò utilizare la seguente formula S0/DC(t) e ripeto qeusto procedimento
 			 * per l'intero mesi di dati, dopodichè tramite la funaione equityfoward vado a interpolarizzare i miei 
 			 * dati e creo la curva
 			 */
-			final DiscountCurve curveSpot = data.getEquityForwardCurve();
-			final double[] maturities = data.getMaturities();
-			final double initialValue = curveSpot.getValue(0.0);
-			final double originalValue = curveSpot.getValue(0.0);
+			
+			
+			
+			final DiscountCurve discountCurve = data.getDiscountCurve();
+			final DiscountCurve equityFowardCurve = data.getEquityForwardCurve();
+
+			final double initialValue = equityFowardCurve.getValue(0.0);
 			/*in questo caso curveSpot deriva da data e data deriva da marketData cambia ogni giorno perchè è all'interno del ciclo
 			 * for, qudini io otterò un prezzo inziale S0 doverso per ogni giorno di trading*/
-			 
-			final double[] fowardMaturities = new double[maturities.length+1];
-			fowardMaturities[0] = 0.0;
-			System.arraycopy(maturities, 0, fowardMaturities, 1, maturities.length);
-			final double[] fowardFactor = new double[maturities.length+1];
-
-			for(int i = 0; i < maturities.length+1; i++) {
-			    
-			    final double t = fowardMaturities[i];
-			    
-			    if(t == 0) {
-			        fowardFactor[i] = initialValue; 
-			        
-			    } else {
-			    
-			        final double fowardValue = originalValue / discountCurve.getValue(t);
-			        fowardFactor[i] = fowardValue; // niente divisione per scalarFactor
-			    }
-			    
-			}
-
-			
-			final ExtrapolationMethod exMethod = ExtrapolationMethod.CONSTANT;
-			final InterpolationMethod intMethod = InterpolationMethod.LINEAR;
-			final InterpolationEntity intEntity = InterpolationEntity.LOG_OF_VALUE;
 			
 			
-			final DiscountCurve equityFowardCurve = DiscountCurveInterpolation.createDiscountCurveFromDiscountFactors(
-					"daxForwardCurve", 
-					fowardMaturities, 
-					fowardFactor,
-					intMethod, 
-					exMethod,
-					intEntity);
 			
 			
-			final OptionSmileData[] allSmile = new OptionSmileData[maturities.length];
-
-			for(int i = 0; i < maturities.length; i++) {
-			    
-			    OptionSmileData smiles = data.getSmile(maturities[i]);
-			    final double[] strikeOriginal = smiles.getStrikes();    
-			    
-			    /*in qeusto 
-			     * modo riesco a recuperarmi per ogni livello di 
-			     * maturità, lo Smile che mi serve, quindi il rapporto tra*/
-			    
-			    final double[] strikeScalar = new double[strikeOriginal.length];
-			    final double[] valuesOriginal = new double[strikeOriginal.length];
-			    
-			    for(int j = 0; j < strikeOriginal.length; j++) {
-			        strikeScalar[j] = strikeOriginal[j]; // niente scalatura
-			        valuesOriginal[j] = data.getValue(maturities[i], strikeOriginal[j], QuotingConvention.VOLATILITYLOGNORMAL); // niente divisione per 100
-			    }
-
-			    allSmile[i] = new OptionSmileData(
-			        "Dax",
-			        today,
-			        strikeScalar,
-			        smiles.getMaturity(),
-			        valuesOriginal,
-			        QuotingConvention.VOLATILITYLOGNORMAL
-			    );
-			}
-
-			
-			OptionSurfaceData surface = new OptionSurfaceData(allSmile, discountCurve, equityFowardCurve);
 			
 			
 			/* Questa funzioen serve essenzialmente per darmi la struttura del modello di Heston ceh poi successivamente andrò 
@@ -315,11 +251,8 @@ public class Exercise1 {
 			 * quando il modello di calibrazione propone un nuovo set teorico di prezzi del nostro modello questo oggetto pricer 
 			 * viene chiamto come punto di partenza per la creazione di qeusti parametri. 
 			 */
-		
-			
-			
-			
-			final CalibratedModel problem = new CalibratedModel(surface, model, optimizerFactory, pricer , currentParameters,parameterStep);
+
+			final CalibratedModel problem = new CalibratedModel(data, model, optimizerFactory, pricer , currentParameters,parameterStep);
 			
 			System.out.println("Calibration started");
 
