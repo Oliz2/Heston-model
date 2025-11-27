@@ -29,6 +29,9 @@ import net.finmath.marketdata.model.volatilities.VolatilitySurface.QuotingConven
 import net.finmath.modelling.descriptor.HestonModelDescriptor;
 import net.finmath.optimizer.OptimizerFactory;
 import net.finmath.optimizer.OptimizerFactoryLevenbergMarquardt;
+import net.finmath.time.businessdaycalendar.BusinessdayCalendar;
+import net.finmath.time.businessdaycalendar.BusinessdayCalendar. DateRollConvention; 
+import net.finmath.time.businessdaycalendar. BusinessdayCalendarExcludingTARGETHolidays;
 
 /**
  * Exercise 1
@@ -71,27 +74,27 @@ public class Exercise1 {
 		 * The true initial condition is fixed by optimizer factory.
 		 *
 		 */
-		final double volatility = 0.0423;
+		final double volatility = 0.15;
 		
 		/* V0: È il livello della varianza (volatilità al quadrato) nel momento attuale ($t=0$). 
 		 * È il punto di partenza del processo stocastico della varianza.
 		 */
-		final double theta = 0.0818;
+		final double theta = 0.04;
 		/*θ: Rappresenta il livello medio a cui la varianza Vt tende 
 		 * a tornare nel tempo (la sua media di lungo periodo). Determina 
 		 * l'altezza della Curva di Volatilità per le scadenze lunghe.
 		 */
-		final double kappa = 0.8455;
+		final double kappa = 1.0;
 		/* k: Determina la velocità con cui la varianza Vt si "aggancia" e 
 		 * torna verso il suo livello di lungo termine θ. Un K
 		 * alto implica che la varianza è molto stabile e torna velocemente alla sua media.
 		 */
-		final double xi = 0.4639;
+		final double xi = 0.5;
 		/* ξ: Misura quanto il processo di varianza è volatile o "rumoroso". 
 		 * Controlla la pendenza e lo spessore dello Smile di Volatilità per una data scadenza.
 		 */
 		
-		final double rho = -0.4;
+		final double rho = -0.5;
 		/*
 		 * Misura la correlazione tra gli shock casuali che influenzano il prezzo dell'asset St e 
 		 * quelli che influenzano la sua varianza 
@@ -100,7 +103,7 @@ public class Exercise1 {
 		 * fa sì che la volatilità aumenti quando il prezzo scende.
 		 */
 
-		final double[] currentParameters = new double[] { volatility, theta, kappa, xi, rho};
+		
 		
 	
 		/*
@@ -112,10 +115,26 @@ public class Exercise1 {
 		 * main loop
 		 */
 		
-		
+		BusinessdayCalendar targetCalendar = new BusinessdayCalendarExcludingTARGETHolidays();
 
+	
+	
+		final double[] currentParameters = new double[] { volatility, theta, kappa, xi, rho};
+		final double[] parameterStep = new double[] { 0.001,0.001,0.001,0.001,0.001};
+		
+	
+		
 		int conteggio = 0; 
 		for(LocalDate today : keys) {
+	
+		
+			
+		
+			if(!targetCalendar.isBusinessday(today)) {
+				System.out.println("Skipping buisness day" + today);
+				continue;
+			}
+			
 			
 			System.out.println(today);
 			if(today.isAfter(limit)) {
@@ -153,8 +172,7 @@ public class Exercise1 {
 			 */
 			final DiscountCurve curveSpot = data.getEquityForwardCurve();
 			final double[] maturities = data.getMaturities();
-			final double scalarFactor = 100;
-			final double initialValue = curveSpot.getValue(0.0)/scalarFactor;
+			final double initialValue = curveSpot.getValue(0.0);
 			final double originalValue = curveSpot.getValue(0.0);
 			/*in questo caso curveSpot deriva da data e data deriva da marketData cambia ogni giorno perchè è all'interno del ciclo
 			 * for, qudini io otterò un prezzo inziale S0 doverso per ogni giorno di trading*/
@@ -163,26 +181,22 @@ public class Exercise1 {
 			fowardMaturities[0] = 0.0;
 			System.arraycopy(maturities, 0, fowardMaturities, 1, maturities.length);
 			final double[] fowardFactor = new double[maturities.length+1];
-			
 
-			
 			for(int i = 0; i < maturities.length+1; i++) {
-				
-				final double t = fowardMaturities[i];
-				
-				if(t == 0) {
-					fowardFactor[i] = initialValue; 
-					
-				}else {
-				
-					final double fowardValue = originalValue/discountCurve.getValue(t);
-					final double scalarFowardValue = fowardValue/scalarFactor; 
-					fowardFactor[i] = scalarFowardValue;
-				}
-				
-				
+			    
+			    final double t = fowardMaturities[i];
+			    
+			    if(t == 0) {
+			        fowardFactor[i] = initialValue; 
+			        
+			    } else {
+			    
+			        final double fowardValue = originalValue / discountCurve.getValue(t);
+			        fowardFactor[i] = fowardValue; // niente divisione per scalarFactor
+			    }
+			    
 			}
-			
+
 			
 			final ExtrapolationMethod exMethod = ExtrapolationMethod.CONSTANT;
 			final InterpolationMethod intMethod = InterpolationMethod.LINEAR;
@@ -199,35 +213,34 @@ public class Exercise1 {
 			
 			
 			final OptionSmileData[] allSmile = new OptionSmileData[maturities.length];
-		
-			
-			
+
 			for(int i = 0; i < maturities.length; i++) {
-				
-				OptionSmileData smiles = data.getSmile(maturities[i]);
-				final double[] strikeOriginal = smiles.getStrikes();	
-				final double[] strikeScalar = new double[strikeOriginal.length];
-				/*in qeusto 
-				 * modo riesco a recuperarmi per ogni livello di 
-				 * maturità, lo Smile che mi serve, quindi il rapporto tra
-				 */
-				final double[] valuesOriginal = new double[strikeOriginal.length];
-				
-				for(int j = 0; j < strikeScalar.length; j++) {
-					strikeScalar[j] = strikeOriginal[j]/scalarFactor;
-					valuesOriginal[j] = data.getValue(maturities[i], strikeOriginal[j],QuotingConvention.VOLATILITYLOGNORMAL);
-				}
-				
-				
-				allSmile[i] = new OptionSmileData(
-						"Dax", 
-						today, 
-						strikeScalar, 
-						smiles.getMaturity(), 
-						valuesOriginal,
-						QuotingConvention.VOLATILITYLOGNORMAL);
-				
+			    
+			    OptionSmileData smiles = data.getSmile(maturities[i]);
+			    final double[] strikeOriginal = smiles.getStrikes();    
+			    
+			    /*in qeusto 
+			     * modo riesco a recuperarmi per ogni livello di 
+			     * maturità, lo Smile che mi serve, quindi il rapporto tra*/
+			    
+			    final double[] strikeScalar = new double[strikeOriginal.length];
+			    final double[] valuesOriginal = new double[strikeOriginal.length];
+			    
+			    for(int j = 0; j < strikeOriginal.length; j++) {
+			        strikeScalar[j] = strikeOriginal[j]; // niente scalatura
+			        valuesOriginal[j] = data.getValue(maturities[i], strikeOriginal[j], QuotingConvention.VOLATILITYLOGNORMAL); // niente divisione per 100
+			    }
+
+			    allSmile[i] = new OptionSmileData(
+			        "Dax",
+			        today,
+			        strikeScalar,
+			        smiles.getMaturity(),
+			        valuesOriginal,
+			        QuotingConvention.VOLATILITYLOGNORMAL
+			    );
 			}
+
 			
 			OptionSurfaceData surface = new OptionSurfaceData(allSmile, discountCurve, equityFowardCurve);
 			
@@ -238,7 +251,7 @@ public class Exercise1 {
 			HestonModelDescriptor hestonModelDescription = new HestonModelDescriptor(
 					today, 
 					initialValue, 
-					equityFowardCurve,
+					discountCurve,
 					discountCurve,
 					volatility, 
 					theta, 
@@ -258,11 +271,11 @@ public class Exercise1 {
 			
 			/* ScalarParameter mi serve per far capire al programma quale delle varibile devono essere calibrate e all'interno di quael range
 			 * */
-			final ScalarParameterInformationImplementation volatilityInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.03,0.10));
-			final ScalarParameterInformationImplementation thetaInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.04,0.08));
-			final ScalarParameterInformationImplementation kappaInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.5,2.5));
-			final ScalarParameterInformationImplementation xiInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.1,0.60));
-			final ScalarParameterInformationImplementation rhoInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(-0.80,-0.30));
+			final ScalarParameterInformationImplementation volatilityInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,1.0));
+			final ScalarParameterInformationImplementation thetaInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,1.0));
+			final ScalarParameterInformationImplementation kappaInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,20.0));
+			final ScalarParameterInformationImplementation xiInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,5));
+			final ScalarParameterInformationImplementation rhoInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(-0.99,0.99));
 			
 			final CalibratableHestonModel model = new CalibratableHestonModel( 
 					hestonModelDescription,
@@ -289,20 +302,22 @@ public class Exercise1 {
 			 * ottimizzazione utilizzerà come punto di partenza per la ricerca della soluzione ottimale.
 			 */
 			
-			final double[] parameterStep = new double[] { 0.01,0.01,0.01,0.01,0.01};
+			
 			/*L'algoritmo LM deve sapere in quale direzione muoversi nello spazio dei parametri per minimizzare l'errore. Per farlo, 
 			 * calcola la derivata parziale (il gradiente) della funzione di errore rispetto a 
 			 * ciascun parametro, usando un metodo chiamato differenze finite.
 			 */
 			
-			final double maturity = 63.0/252;
-			final EuropeanOptionSmileByCarrMadan pricer = new EuropeanOptionSmileByCarrMadan(maturity, new double[] { 100 });
+			final double maturity = 105.0/252;
+			final EuropeanOptionSmileByCarrMadan pricer = new EuropeanOptionSmileByCarrMadan(maturity, new double [] {initialValue});
 			/*La classe EuropeanOption funge solo da punto di partenza per il nostro modello. il etodo ceh stiamo utilizzando
 			 * è il FFT, che è il metodo più efficace per calocolare gli smile attraverso una funzioen caratteristica.
 			 * quando il modello di calibrazione propone un nuovo set teorico di prezzi del nostro modello questo oggetto pricer 
 			 * viene chiamto come punto di partenza per la creazione di qeusti parametri. 
 			 */
 		
+			
+			
 			
 			final CalibratedModel problem = new CalibratedModel(surface, model, optimizerFactory, pricer , currentParameters,parameterStep);
 			
@@ -322,22 +337,27 @@ public class Exercise1 {
 			
 			final double rmse = result.getRootMeanSquaredError();
 			
+	
 			
 			if(Double.isFinite(rmse)) {
 			final HestonModelDescriptor hestonDescriptor = (HestonModelDescriptor) result.getModel().getModelDescriptor();
+		
 			
-
+			currentParameters[0] = hestonDescriptor.getVolatility();
+			currentParameters[1]= hestonDescriptor.getTheta();
+			currentParameters[2] = hestonDescriptor.getKappa();
+			currentParameters[3]= hestonDescriptor.getXi();
+			currentParameters[4]= hestonDescriptor.getRho();
+			
+			
+		
+			
 			System.out.println(hestonDescriptor.getVolatility());
 			System.out.println(hestonDescriptor.getTheta());
 			System.out.println(hestonDescriptor.getKappa());
 			System.out.println(hestonDescriptor.getXi());
 			System.out.println(hestonDescriptor.getRho());
-			
-			currentParameters[0] = hestonDescriptor.getVolatility();
-		    currentParameters[1] = hestonDescriptor.getTheta();
-		    currentParameters[2] = hestonDescriptor.getKappa();
-		    currentParameters[3] = hestonDescriptor.getXi();
-		    currentParameters[4] = hestonDescriptor.getRho();
+		
 			
 			final double volatilitySeries = hestonDescriptor.getVolatility();
 		
@@ -350,6 +370,7 @@ public class Exercise1 {
 			final double rhoSeries = hestonDescriptor.getRho();
 			
 			
+			
 	
 		
 			volatilityTimeSeries.add(today, volatilitySeries);
@@ -358,6 +379,8 @@ public class Exercise1 {
 			xiTimeSeries.add(today, xiSeries);
 			rhoTimeSeries.add(today, rhoSeries);
 			rmseTimeSeries.add(today, rmse);
+			
+			System.out.println("----------------------------------");
 			
 			
 			
@@ -369,6 +392,7 @@ public class Exercise1 {
 			}
 			
 			
+			Assert.assertTrue(result.getRootMeanSquaredError() < 1.0);
 			
 			
 			//CalibrationUtilities.printErrorsTable(errorsOverview);
@@ -376,16 +400,25 @@ public class Exercise1 {
 			
 			
 			}else {
-				System.err.println("ATTENZIONE: Calibrazione non convergente per " + today + ". Dati saltati.");
+				
+				
+				/*
+				System.err.println("Giorno Saltato: " + today + ". I dati non avevano senso, RMSE == infinito");
 				//Assert.assertTrue(result.getRootMeanSquaredError() < 1.0);
+				///*/
+				
 				conteggio++; 
 
+				
+				/*
 				ArrayList<String> errorsOverview = result.getCalibrationOutput();
 
 				
 				for(final String myString : errorsOverview) {
-					System.out.println(myString);
+					System.out.println(myStringv);
 				}
+				*/
+				
 				
 				
 			
@@ -402,16 +435,13 @@ public class Exercise1 {
 		System.out.println(conteggio);
 			
 			
-			
-			
-			
-				
-			
 		}
+	}
+
 		
 		
 
-	}
+	
 	
 
 
