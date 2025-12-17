@@ -1,11 +1,8 @@
 package it.univr.derivatives20252026.exercise2;
 
 import java.time.LocalDate;
-import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.DoubleUnaryOperator;
-import java.util.function.Function;
 
 import it.univr.derivatives.marketdataprovider.MarketDataProvider;
 import net.finmath.exception.CalculationException;
@@ -14,134 +11,172 @@ import net.finmath.fouriermethod.calibration.CalibratedModel;
 import net.finmath.fouriermethod.calibration.ScalarParameterInformationImplementation;
 import net.finmath.fouriermethod.calibration.CalibratedModel.OptimizationResult;
 import net.finmath.fouriermethod.calibration.models.CalibratableHestonModel;
-import net.finmath.fouriermethod.models.CharacteristicFunctionModel;
 import net.finmath.fouriermethod.models.HestonModel;
-import net.finmath.fouriermethod.products.EuropeanOption;
 import net.finmath.fouriermethod.products.smile.EuropeanOptionSmileByCarrMadan;
-import net.finmath.integration.SimpsonRealIntegrator;
 import net.finmath.integration.TrapezoidalRealIntegrator;
 import net.finmath.marketdata.model.curves.DiscountCurve;
-import net.finmath.marketdata.model.curves.DiscountCurveInterpolation;
-import net.finmath.marketdata.model.curves.CurveInterpolation.ExtrapolationMethod;
-import net.finmath.marketdata.model.curves.CurveInterpolation.InterpolationEntity;
-import net.finmath.marketdata.model.curves.CurveInterpolation.InterpolationMethod;
-import net.finmath.marketdata.model.volatilities.OptionSmileData;
 import net.finmath.marketdata.model.volatilities.OptionSurfaceData;
-import net.finmath.marketdata.model.volatilities.VolatilitySurface.QuotingConvention;
 import net.finmath.modelling.descriptor.HestonModelDescriptor;
 import net.finmath.optimizer.OptimizerFactory;
 import net.finmath.optimizer.OptimizerFactoryLevenbergMarquardt;
 import net.finmath.optimizer.SolverException;
+import net.finmath.time.businessdaycalendar.BusinessdayCalendar;
+import net.finmath.time.businessdaycalendar.BusinessdayCalendarExcludingTARGETHolidays;
 
 public class Exercise2 {
 
 	public static void main(String[] args) throws SolverException, CalculationException {
-		/*
-		 * Application of the Carr Madan formula for the
-		 * static replication of a Variance swap.
-		 */
-
-		//Step 1 Create a Heston model
 		
+		// We calibrate one day to get the parameters
+		TreeMap<LocalDate, OptionSurfaceData> marketData = MarketDataProvider.getVolatilityDataContainer();
+		BusinessdayCalendar targetCalendar = new BusinessdayCalendarExcludingTARGETHolidays();	
+		
+		/*
+		 * The while loop verifies whether the selected date is a valid business day. 
+		 * If the reference date falls on a non-business day, 
+		 * the loop advances to the next available trading day.
+		 */
+		LocalDate today = LocalDate.of(2006, 1, 2);
+		while(true) {
+			if(!targetCalendar.isBusinessday(today)) {
+				today = today.plusDays(1);
+			}else {
+				break; 
+			}
+			}
+		
+		
+		OptionSurfaceData data = marketData.get(today);
 		double volatility = 0.15;
 		double theta = 0.04;
 		double kappa = 1.0;
 		double xi = 0.5;
 		double rho = -0.5;
 		
-		
-		final double[] currentParameters = new double[] { volatility, theta, kappa, xi, rho};
-		final double[] parameterStep = new double[] { 0.001,0.001,0.001,0.001,0.001};
-		
-		LocalDate localDate = LocalDate.of(2006, 2, 2).plusMonths(1);
-		TreeMap<LocalDate, OptionSurfaceData> marketData = MarketDataProvider.getVolatilityDataContainer();
-		OptionSurfaceData data = marketData.get(localDate);
-		
-		
+		double[] currentParameters = new double[] { volatility, theta, kappa, xi, rho};
+		final double[] parameterStep = new double[] { 0.0001, 0.0001, 0.0001, 0.0001, 0.0001};
+				
 		final DiscountCurve discountCurve = data.getDiscountCurve();
-		final DiscountCurve equityFowardCurve = data.getEquityForwardCurve();
-
-		final double initialValue = equityFowardCurve.getValue(0.0);
-
-		HestonModelDescriptor hestonModelDescription = new HestonModelDescriptor(
-				localDate, 
-				initialValue, 
-				discountCurve,
-				discountCurve,
-				volatility, 
-				theta, 
-				kappa, 
-				xi, 
-				rho);
-		final ScalarParameterInformationImplementation volatilityInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,1.0));
-		final ScalarParameterInformationImplementation thetaInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,1.0));
-		final ScalarParameterInformationImplementation kappaInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,20.0));
-		final ScalarParameterInformationImplementation xiInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01,5));
-		final ScalarParameterInformationImplementation rhoInformation = new ScalarParameterInformationImplementation(true, new BoundConstraint(-0.99,0.99));
+		final DiscountCurve equityForwardCurve = data.getEquityForwardCurve();
+		double initialValue = equityForwardCurve.getValue(0.0);
+		
+		
+		HestonModelDescriptor hestonModelDescription = new HestonModelDescriptor(today, initialValue, discountCurve, discountCurve, volatility, 
+				theta, kappa, xi, rho);
+		
+		final ScalarParameterInformationImplementation volatilityInfo = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01, 1.0));
+		final ScalarParameterInformationImplementation thetaInfo = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01, 1.0));
+		final ScalarParameterInformationImplementation kappaInfo = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.1, 20.0));
+		final ScalarParameterInformationImplementation xiInfo = new ScalarParameterInformationImplementation(true, new BoundConstraint(0.01, 5.0));
+		final ScalarParameterInformationImplementation rhoInfo = new ScalarParameterInformationImplementation(true, new BoundConstraint(-0.99, 0.0));
 		
 		final CalibratableHestonModel model = new CalibratableHestonModel( 
 				hestonModelDescription,
-				volatilityInformation,
-				thetaInformation,
-				kappaInformation,
-				xiInformation,
-				rhoInformation,
+				volatilityInfo, 
+				thetaInfo, 
+				kappaInfo, 
+				xiInfo, 
+				rhoInfo, 
 				false);
-	
-	
-		final OptimizerFactory optimizerFactory = new OptimizerFactoryLevenbergMarquardt(300 /* maxIterations */, 2 /* maxThreads */);
-		final double maturity = 30.0/252;
-		final EuropeanOptionSmileByCarrMadan pricer = new EuropeanOptionSmileByCarrMadan(maturity, new double [] {initialValue});
-		final CalibratedModel problem = new CalibratedModel(data, model, optimizerFactory, pricer , currentParameters,parameterStep);
 		
-
+		final OptimizerFactory optimizerFactory = new OptimizerFactoryLevenbergMarquardt(300, 2);
+		
+		final double maturityPricer = 63.0/252;
+		
+		final EuropeanOptionSmileByCarrMadan pricer = new EuropeanOptionSmileByCarrMadan(maturityPricer, new double[] { initialValue });
+	
+		final CalibratedModel problem = new CalibratedModel(data, model, optimizerFactory, pricer, currentParameters, parameterStep);
+		
 		final OptimizationResult result = problem.getCalibration();
-		final HestonModelDescriptor calibratedHestonDescriptor = (HestonModelDescriptor) result.getModel().getModelDescriptor();
+		final HestonModelDescriptor hestonDescriptor = (HestonModelDescriptor) result.getModel().getModelDescriptor();
 		
-		volatility = calibratedHestonDescriptor.getVolatility();
-		theta = calibratedHestonDescriptor.getTheta();
-		kappa = calibratedHestonDescriptor.getKappa();
-		xi = calibratedHestonDescriptor.getXi();
-		rho = calibratedHestonDescriptor.getRho();
-		/*
-		 * Use the closed-form formula for the price of the variance swap
-		 */
-		final double term1 = 1 - Math.exp(-(kappa*maturity));
+	
+		volatility = hestonDescriptor.getVolatility();
+		theta = hestonDescriptor.getTheta();
+		kappa = hestonDescriptor.getKappa();
+		xi = hestonDescriptor.getXi();
+		rho = hestonDescriptor.getRho();
 		
-		final double fairVarSwapRate = ((term1/(kappa*maturity))*(volatility-theta))+theta;
+		// Set the contract maturity
+		double maturity = 30.0/252;
 		
-		System.out.println("The fair Variance Swap Rate is " + fairVarSwapRate);
-		
-		
-		
-		
-		
-		/*
-		 * Second approach
-		 * 
+		/**
+		 *  First approach: analytic formula.
+		 *  Expectation of the integrated variance process under Heston dynamics
 		 */
 		
+		//Computes the variance Swap formula (5)
+		double fairVarSwapRate = ((1-Math.exp(-kappa*maturity))/(kappa*maturity))*(volatility*volatility-theta)+theta;
+		
+		System.out.println(" --- Formula (5): Analytic approach ---");
+		
+		System.out.println("The fair Variance Swap Rate (5) is: " + fairVarSwapRate);
 		
 		
-		/*
-		TrapezoidalRealIntegrator integratorCalls2 = 
-				new TrapezoidalRealIntegrator(daxForwardPrice*1.01, 4*daxForwardPrice, 300);*/
+		/**
+		 * Second approach : static replication. Carr-Madan replication
+		 */
 		
+		// Scaling Spot for numerical stability in integration
+		double daxSpotPrice = equityForwardCurve.getValue(0.0)/100;
+		double riskFreeRate = 0.0;
+		double discountRate = riskFreeRate;
+		double daxForwardPrice = daxSpotPrice*Math.exp(riskFreeRate*maturity);
 		
+		// Creates the characteristic function for pricing with calibrated parameters
+		HestonModel modelHS = new HestonModel(daxSpotPrice, riskFreeRate, volatility, discountRate, theta, kappa, xi, rho);
 		
-		/*DoubleUnaryOperator integrandCalls2 = x ->
+		// Creates the resolver for the Call integral parts
+		TrapezoidalRealIntegrator integratorCalls2 = new TrapezoidalRealIntegrator(daxForwardPrice, 5*daxForwardPrice, 3000);
 		
+		// Creates the resolver for the Put integral parts
+		TrapezoidalRealIntegrator integratorPuts2 = new TrapezoidalRealIntegrator(0.01*daxForwardPrice, daxForwardPrice, 3000);
+		
+		// Defines integrand for Calls
+		DoubleUnaryOperator integrandCalls2 = x ->
 		{
 			try {
-				return new net.finmath.fouriermethod.products.
-						EuropeanOption(maturity, x)
-						.getValue(modelHS)/(x*x);
+				return new net.finmath.fouriermethod.products.EuropeanOption(maturity, x).getValue(modelHS)/(x*x);
 			} catch (CalculationException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			return 0.0;
-		};*/
+		};
+		
+		// Defines integrand for Puts
+		DoubleUnaryOperator integrandPuts2 = x -> 
+		{
+		    try {
+		    	// Computes the calls price
+		        double priceCall = new net.finmath.fouriermethod.products.EuropeanOption(maturity, x)
+		                .getValue(modelHS);
+		        // Uses put-call parity to compute puts price
+		        double pricePut = priceCall - daxSpotPrice + (x*Math.exp(-riskFreeRate*maturity));
+
+		        return pricePut / (x * x);
+		        } catch (CalculationException e) {
+		        	e.printStackTrace();
+				}
+				return 0.0;
+			};
+		
+		// Performs integration
+		double integratedPut = integratorPuts2.integrate(integrandPuts2);
+		double integratedCall = integratorCalls2.integrate(integrandCalls2);
+		
+		System.out.println(" --- Formula (6): Static approach ---");
+		
+		// Computes the price via formula (6)
+		double finalPrice = 2.0*((riskFreeRate*maturity)-Math.log(daxForwardPrice/daxSpotPrice)
+				+Math.exp(riskFreeRate*maturity)*integratedPut+Math.exp(riskFreeRate*maturity)*integratedCall);
+		double fairPrice2 = finalPrice/maturity;
+		
+		System.out.println("The Fair VarSwap Rate (6) is: " + fairPrice2);
+		
+		// Validations
+		System.out.println("Difference vs Analytical: " + (Math.abs(fairVarSwapRate - fairPrice2)));
+		System.out.println("Relative difference with analytic: " + (Math.abs(fairVarSwapRate - fairPrice2)/fairVarSwapRate)*100 + "%");
+	
 		
 	}
 
